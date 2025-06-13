@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control de Rondas - Bodega de Calzado</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qr-scanner/1.4.2/qr-scanner.umd.min.js"></script>
+    
+    <!-- Firebase Scripts - Versión 8 Compatible -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            padding: 30px;
+        }
+
+        .status-card {
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(116, 185, 255, 0.3);
+        }
+
+        .firebase-status {
+            background: linear-gradient(135deg, #00b894, #00cec9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .firebase-status.connecting {
+            background: linear-gradient(135deg, #fdcb6e, #e17055);
+            animation: pulse 2s infinite;
+        }
+
+        .firebase-status.offline {
+            background: linear-gradient(135deg, #e17055, #d63031);
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+            100% { transform: scale(1); }
+        }
+
+        .progress-container {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            border: 2px solid #e9ecef;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00b894, #00cec9);
+            transition: width 0.5s ease;
+            border-radius: 10px;
+        }
+
+        .locations-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .location-card {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .location-card.completed {
+            background: linear-gradient(135deg, #00b894, #00cec9);
+            color: white;
+            border-color: #00b894;
+            transform: scale(1.02);
+        }
+
+        .location-card.current {
+            background: linear-gradient(135deg, #fdcb6e, #e17055);
+            color: white;
+            border-color: #fdcb6e;
+            animation: pulse 2s infinite;
+        }
+
+        .scanner-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .scanner-btn {
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+        }
+
+        .scanner-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(108, 92, 231, 0.3);
+        }
+
+        .scanner-btn:disabled {
+            background: #ddd;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .scanner-btn.loading {
+            background: #fdcb6e;
+            cursor: wait;
+        }
+
+        #qr-video {
+            width: 100%;
+            max-width: 400px;
+            border-radius: 12px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            backdrop-filter: blur(5px);
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 30px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: modalSlideIn 0.3s ease;
+        }
+
+        @keyframes modalSlideIn {
+            from { opacity: 0; transform: translateY(-50px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .modal h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .modal textarea {
+            width: 100%;
+            height: 120px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            font-size: 1em;
+            resize: vertical;
+            margin-bottom: 20px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00b894, #00cec9);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #74b9ff;
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .history-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+
+        .history-item {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 5px solid #00b894;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .locations-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🛡️ Control de Rondas</h1>
+            <p>Sistema de Verificación de Recorridos - Bodega de Calzado</p>
+        </div>
+
+        <div class="main-content">
+            <div id="firebase-status" class="firebase-status connecting">
+                🔄 Conectando con Firebase...
+            </div>
+
+            <div id="alert-container"></div>
+
+            <div class="status-card">
+                <h2 id="patrol-status">Listo para iniciar recorrido</h2>
+                <p id="current-time"></p>
+            </div>
+
+            <div class="progress-container">
+                <h3>Progreso del Recorrido</h3>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                </div>
+                <p><span id="completed-count">0</span> de <span id="total-count">10</span> ubicaciones completadas</p>
+            </div>
+
+            <div class="locations-grid" id="locations-grid">
+            </div>
+
+            <div class="controls">
+                <button class="scanner-btn" id="start-patrol" onclick="startPatrol()">🚀 Iniciar Recorrido</button>
+                <button class="scanner-btn" id="scan-btn" onclick="toggleScanner()" disabled>📱 Escanear QR</button>
+                <button class="scanner-btn" id="finish-patrol" onclick="finishPatrol()" disabled>✅ Finalizar Recorrido</button>
+                <button class="scanner-btn" onclick="exportData()">📊 Exportar Datos</button>
+            </div>
+
+            <div class="scanner-section">
+                <video id="qr-video"></video>
+                <p id="scan-status"></p>
+            </div>
+
+            <div class="history-section">
+                <h3>📋 Historial de Recorridos <button class="btn btn-secondary" onclick="loadHistoryFromFirebase()" style="float: right; padding: 8px 16px; font-size: 0.9em;">🔄 Actualizar</button></h3>
+                <div id="history-container">
+                    <p style="text-align: center; color: #666;">Cargando historial...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="observation-modal" class="modal">
+        <div class="modal-content">
+            <h3>📝 Observaciones - <span id="modal-location"></span></h3>
+            <textarea id="observation-text" placeholder="Escribe aquí cualquier observación, incidencia o comentario sobre esta ubicación..."></textarea>
+            
+            <div class="photo-section" style="margin-bottom: 20px;">
+                <input type="file" id="photo-input" accept="image/*" capture="environment" style="display: none;">
+                <button class="btn btn-secondary" onclick="document.getElementById('photo-input').click();">📸 Tomar Foto</button>
+                <img id="photo-preview" style="max-width: 100%; border-radius: 8px; margin-top: 15px; display: none;" alt="Vista previa de la foto"/>
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+                <button class="btn btn-primary" onclick="saveObservation()">Guardar y Continuar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ⭐ CONFIGURACIÓN DE FIREBASE CORREGIDA
+        const firebaseConfig = {
+            apiKey: "AIzaSyCgPT1FZsbk89YF9hWQNNf-pzy_XF86nSE",
+            authDomain: "control-rondines-c4.firebaseapp.com",
+            projectId: "control-rondines-c4",
+            storageBucket: "control-rondines-c4.firebasestorage.app",
+            messagingSenderId: "899080881725",
+            appId: "1:899080881725:web:362120304477bb5ed64c54"
+        };
+
+        // Variables globales
+        let db;
+        let isFirebaseConnected = false;
+        let connectionTimeout;
+
+        // Función para inicializar Firebase con mejor manejo de errores
+        async function initializeFirebase() {
+            try {
+                console.log('🔄 Inicializando Firebase...');
+                
+                // Establecer timeout para conexión
+                connectionTimeout = setTimeout(() => {
+                    if (!isFirebaseConnected) {
+                        console.log('⏰ Timeout de conexión Firebase');
+                        updateFirebaseStatus('timeout');
+                    }
+                }, 10000); // 10 segundos timeout
+
+                // Inicializar Firebase
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                
+                db = firebase.firestore();
+                
+                // Configurar persistencia offline
+                db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+                    console.log('⚠️ No se pudo habilitar persistencia offline:', err.code);
+                });
+
+                // Probar conexión con operación simple
+                console.log('🔍 Probando conexión con Firestore...');
+                
+                // Crear documento de prueba
+                const testDoc = await db.collection('test').add({
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    test: true
+                });
+                
+                // Si llegamos aquí, la conexión es exitosa
+                console.log('✅ Conexión Firebase exitosa, documento de prueba:', testDoc.id);
+                
+                // Limpiar documento de prueba
+                await testDoc.delete();
+                
+                clearTimeout(connectionTimeout);
+                isFirebaseConnected = true;
+                updateFirebaseStatus('connected');
+                
+                // Cargar historial
+                setTimeout(() => loadHistoryFromFirebase(), 1000);
+                
+            } catch (error) {
+                console.error('❌ Error inicializando Firebase:', error);
+                clearTimeout(connectionTimeout);
+                isFirebaseConnected = false;
+                updateFirebaseStatus('error', error.message);
+            }
+        }
+
+        // Función mejorada para actualizar estado de Firebase
+        function updateFirebaseStatus(status, errorMessage = '') {
+            const statusEl = document.getElementById('firebase-status');
+            
+            switch(status) {
+                case 'connected':
+                    statusEl.textContent = '🔥 Conectado a Firebase - Base de datos activa';
+                    statusEl.className = 'firebase-status';
+                    break;
+                case 'connecting':
+                    statusEl.textContent = '🔄 Conectando con Firebase...';
+                    statusEl.className = 'firebase-status connecting';
+                    break;
+                case 'timeout':
+                    statusEl.textContent = '⏰ Timeout de conexión - Trabajando en modo offline';
+                    statusEl.className = 'firebase-status offline';
+                    break;
+                case 'error':
+                    statusEl.textContent = `❌ Error de conexión: ${errorMessage.substring(0, 50)}...`;
+                    statusEl.className = 'firebase-status offline';
+                    break;
+                default:
+                    statusEl.textContent = '⚠️ Sin conexión a Firebase - Modo offline';
+                    statusEl.className = 'firebase-status offline';
+            }
+        }
+
+        // Configuración del sistema
+        const AUTHORIZED_QRS = [
+            'BODEGA_ENTRADA_001',
+            'BODEGA_PASILLO_A_002', 
+            'BODEGA_PASILLO_B_003',
+            'BODEGA_ALMACEN_1_004',
+            'BODEGA_ALMACEN_2_005',
+            'BODEGA_OFICINA_006',
+            'BODEGA_SALIDA_EMERG_007',
+            'BODEGA_PATIO_008',
+            'BODEGA_VIGILANCIA_009',
+            'BODEGA_SALIDA_010'
+        ];
+
+        const LOCATION_NAMES = [
+            'Entrada Principal',
+            'Pasillo A - Calzado Dama',
+            'Pasillo B - Calzado Caballero',
+            'Almacén Sección 1',
+            'Almacén Sección 2', 
+            'Área de Oficinas',
+            'Salida de Emergencia',
+            'Patio de Maniobras',
+            'Puesto de Vigilancia',
+            'Salida Principal'
+        ];
+
+        // Variables del sistema
+        let currentPatrol = null;
+        let qrScanner = null;
+        let isScanning = false;
+        let currentLocationIndex = 0;
+
+        // Funciones Firebase mejoradas
+        async function saveToFirebase(patrol) {
+            if (!isFirebaseConnected) {
+                showAlert('⚠️ Sin conexión a Firebase. Los datos se guardarán localmente.', 'warning');
+                saveToLocalStorage(patrol);
+                return false;
+            }
+
+            showLoading(true);
+            try {
+                const docRef = await db.collection('recorridos').add({
+                    patrolId: patrol.id,
+                    startTime: firebase.firestore.Timestamp.fromDate(patrol.startTime),
+                    endTime: patrol.endTime ? firebase.firestore.Timestamp.fromDate(patrol.endTime) : null,
+                    locations: patrol.locations,
+                    completed: patrol.completed,
+                    totalLocations: AUTHORIZED_QRS.length,
+                    completedLocations: patrol.locations.length,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                
+                console.log('✅ Recorrido guardado en Firebase con ID:', docRef.id);
+                showAlert('🔥 Recorrido guardado en Firebase correctamente', 'success');
+                
+                // Actualizar historial
+                setTimeout(() => loadHistoryFromFirebase(), 1000);
+                
+                return docRef.id;
+            } catch (error) {
+                console.error('❌ Error guardando en Firebase:', error);
+                showAlert('❌ Error al guardar en Firebase. Guardando localmente...', 'error');
+                saveToLocalStorage(patrol);
+                return false;
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function loadHistoryFromFirebase() {
+            if (!isFirebaseConnected) {
+                loadHistoryFromLocalStorage();
+                return;
+            }
+
+            try {
+                const snapshot = await db.collection('recorridos')
+                    .orderBy('createdAt', 'desc')
+                    .limit(20)
+                    .get();
+                
+                const history = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    history.push({
+                        id: doc.id,
+                        patrolId: data.patrolId,
+                        startTime: data.startTime?.toDate(),
+                        endTime: data.endTime?.toDate(),
+                        locations: data.locations || [],
+                        completed: data.completed,
+                        createdAt: data.createdAt?.toDate()
+                    });
+                });
+                
+                displayHistory(history);
+                console.log(`✅ Cargados ${history.length} recorridos desde Firebase`);
+            } catch (error) {
+                console.error('❌ Error cargando historial de Firebase:', error);
+                showAlert('⚠️ Error al cargar historial de Firebase', 'warning');
+                loadHistoryFromLocalStorage();
+            }
+        }
+
+        // Funciones de respaldo (localStorage)
+        function saveToLocalStorage(patrol) {
+            let history = JSON.parse(localStorage.getItem('patrolHistory') || '[]');
+            history.unshift(patrol);
+            
+            if (history.length > 50) {
+                history = history.slice(0, 50);
+            }
+            
+            localStorage.setItem('patrolHistory', JSON.stringify(history));
+            displayHistory(history);
+        }
+
+        function loadHistoryFromLocalStorage() {
+            const history = JSON.parse(localStorage.getItem('patrolHistory') || '[]');
+            displayHistory(history.map(item => ({
+                ...item,
+                startTime: new Date(item.startTime),
+                endTime: item.endTime ? new Date(item.endTime) : null
+            })));
+        }
+
+        // Función para mostrar historial
+        function displayHistory(history) {
+            const container = document.getElementById('history-container');
+            
+            if (history.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #666;">No hay recorridos registrados</p>';
+                return;
+            }
+            
+            container.innerHTML = history.map(patrol => `
+                <div class="history-item">
+                    <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 10px;">
+                        <strong>Recorrido #${patrol.patrolId}</strong>
+                        <span style="color: ${patrol.completed ? '#00b894' : '#e17055'};">
+                            ${patrol.completed ? '✅ Completado' : '⏳ En progreso'}
+                        </span>
+                    </div>
+                    <p><strong>Inicio:</strong> ${patrol.startTime?.toLocaleString('es-MX') || 'N/A'}</p>
+                    ${patrol.endTime ? `<p><strong>Fin:</strong> ${patrol.endTime.toLocaleString('es-MX')}</p>` : ''}
+                    <p><strong>Ubicaciones:</strong> ${patrol.locations?.length || 0} de ${AUTHORIZED_QRS.length}</p>
+                    ${patrol.locations?.length > 0 ? `
+                        <details style="margin-top: 10px;">
+                            <summary style="cursor: pointer; color: #0984e3;">Ver detalles</summary>
+                            <div style="margin-top: 10px; padding-left: 15px;">
+                                ${patrol.locations.map(loc => `
+                                    <p style="margin: 5px 0;"><strong>${loc.locationName}</strong> - ${new Date(loc.timestamp).toLocaleTimeString('es-MX')}</p>
+                                    ${loc.observation !== 'Sin observaciones' ? `<p style="color: #666; font-size: 0.9em; margin-left: 15px;">"${loc.observation}"</p>` : ''}
+                                `).join('')}
+                            </div>
+                        </details>
+                    ` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Función para comprimir imágenes
+        function compressImage(file, maxWidth = 800, quality = 0.6) {
+            return new Promise((resolve) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                img.onload = () => {
+                    const ratio = Math.min(maxWidth / img.width, maxWidth / img.height);
+                    canvas.width = img.width * ratio;
+                    canvas.height = img.height * ratio;
+                    
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    resolve(canvas.toDataURL('image/jpeg', quality));
+                };
+                
+                img.src = URL.createObjectURL(file);
+            });
+        }
+
+        // Funciones de utilidad
+        function showAlert(message, type = 'success') {
+            const container = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.textContent = message;
+            
+            container.appendChild(alert);
+            
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none';
+        }
+
+        // Inicializar la aplicación
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Iniciando aplicación...');
+            initializeApp();
+            initializeFirebase(); // Inicializar Firebase
+            updateTime();
+            setInterval(updateTime, 1000);
+            document.getElementById('photo-input').addEventListener('change', handlePhotoTaken);
+        });
+
+        function initializeApp() {
+            generateLocationCards();
+            updateDisplay();
+            
+            // Cargar historial desde localStorage inicialmente
+            loadHistoryFromLocalStorage();
+        }
+
+        function generateLocationCards() {
+            const grid = document.getElementById('locations-grid');
+            grid.innerHTML = '';
+            
+            LOCATION_NAMES.forEach((name, index) => {
+                const card = document.createElement('div');
+                card.className = 'location-card';
+                card.id = `location-${index}`;
+                card.innerHTML = `
+                    <h4>${index + 1}. ${name}</h4>
+                    <p>Pendiente</p>
+                `;
+                grid.appendChild(card);
+            });
+            
+            document.getElementById('total-count').textContent = LOCATION_NAMES.length;
+        }
+
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = 
+                now.toLocaleString('es-MX', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+        }
+
+        function startPatrol() {
+            currentPatrol = {
+                id: Date.now(),
+                startTime: new Date(),
+                locations: [],
+                completed: false
+            };
+            
+            currentLocationIndex = 0;
+            updateDisplay();
+            showAlert('✅ Recorrido iniciado correctamente', 'success');
+            
+            document.getElementById('start-patrol').disabled = true;
+            document.getElementById('scan-btn').disabled = false;
+            document.getElementById('finish-patrol').disabled = false;
+            document.getElementById('patrol-status').textContent = 'Recorrido en progreso';
+            
+            updateLocationCards();
+        }
+
+        function toggleScanner() {
+            if (isScanning) {
+                stopScanner();
+            } else {
+                startScanner();
+            }
+        }
+
+        async function startScanner() {
+            try {
+                const video = document.getElementById('qr-video');
+                const scanBtn = document.getElementById('scan-btn');
+                
+                video.style.display = 'block';
+                scanBtn.textContent = '⏹️ Detener Escáner';
+                document.getElementById('scan-status').textContent = 'Escaneando... Apunta la cámara al código QR';
+                
+                qrScanner = new QrScanner(video, 
+                    result => handleQRResult(result.data),
+                    {
+                        highlightScanRegion: true,
+                        highlightCodeOutline: true
+                    }
+                );
+                
+                await qrScanner.start();
+                isScanning = true;
+                
+            } catch (error) {
+                console.error('Error iniciando escáner:', error);
+                showAlert('❌ Error al acceder a la cámara. Verifica los permisos.', 'error');
+                stopScanner();
+            }
+        }
+
+        function stopScanner() {
+            if (qrScanner) {
+                qrScanner.stop();
+                qrScanner.destroy();
+                qrScanner = null;
+            }
+            
+            const video = document.getElementById('qr-video');
+            video.style.display = 'none';
+            
+            document.getElementById('scan-btn').textContent = '📱 Escanear QR';
+            document.getElementById('scan-status').textContent = '';
+            isScanning = false;
+        }
+
+        function handleQRResult(qrData) {
+            if (!currentPatrol) {
+                showAlert('⚠️ Inicia un recorrido antes de escanear códigos QR', 'warning');
+                return;
+            }
+
+            // Verificar si el QR es válido
+            const qrIndex = AUTHORIZED_QRS.indexOf(qrData);
+            if (qrIndex === -1) {
+                showAlert('❌ Código QR no autorizado', 'error');
+                return;
+            }
+
+            // Verificar si ya fue escaneado
+            const alreadyScanned = currentPatrol.locations.some(loc => loc.qrCode === qrData);
+            if (alreadyScanned) {
+                showAlert('⚠️ Esta ubicación ya fue registrada', 'warning');
+                return;
+            }
+
+            stopScanner();
+            showObservationModal(qrIndex, qrData);
+        }
+
+        function showObservationModal(locationIndex, qrCode) {
+            const modal = document.getElementById('observation-modal');
+            const locationName = document.getElementById('modal-location');
+            const textarea = document.getElementById('observation-text');
+            const photoPreview = document.getElementById('photo-preview');
+            
+            locationName.textContent = LOCATION_NAMES[locationIndex];
+            textarea.value = '';
+            photoPreview.style.display = 'none';
+            
+            modal.style.display = 'block';
+            
+            // Guardar datos temporales para el modal
+            modal.dataset.locationIndex = locationIndex;
+            modal.dataset.qrCode = qrCode;
+        }
+
+        function closeModal() {
+            document.getElementById('observation-modal').style.display = 'none';
+        }
+
+        async function handlePhotoTaken(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            try {
+                showLoading(true);
+                const compressedImage = await compressImage(file);
+                
+                const preview = document.getElementById('photo-preview');
+                preview.src = compressedImage;
+                preview.style.display = 'block';
+                
+                showAlert('📸 Foto capturada correctamente', 'success');
+            } catch (error) {
+                console.error('Error procesando imagen:', error);
+                showAlert('❌ Error al procesar la imagen', 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        async function saveObservation() {
+            const modal = document.getElementById('observation-modal');
+            const locationIndex = parseInt(modal.dataset.locationIndex);
+            const qrCode = modal.dataset.qrCode;
+            const observation = document.getElementById('observation-text').value || 'Sin observaciones';
+            const photoPreview = document.getElementById('photo-preview');
+            
+            const locationData = {
+                qrCode: qrCode,
+                locationName: LOCATION_NAMES[locationIndex],
+                timestamp: new Date().toISOString(),
+                observation: observation,
+                photo: photoPreview.style.display === 'block' ? photoPreview.src : null
+            };
+            
+            currentPatrol.locations.push(locationData);
+            updateLocationCards();
+            updateProgress();
+            closeModal();
+            
+            showAlert(`✅ Ubicación "${LOCATION_NAMES[locationIndex]}" registrada correctamente`, 'success');
+            
+            // Guardar progreso en Firebase
+            if (isFirebaseConnected) {
+                await saveToFirebase(currentPatrol);
+            }
+        }
+
+        function updateLocationCards() {
+            LOCATION_NAMES.forEach((name, index) => {
+                const card = document.getElementById(`location-${index}`);
+                const isCompleted = currentPatrol && 
+                    currentPatrol.locations.some(loc => AUTHORIZED_QRS.indexOf(loc.qrCode) === index);
+                
+                if (isCompleted) {
+                    card.className = 'location-card completed';
+                    card.innerHTML = `<h4>${index + 1}. ${name}</h4><p>✅ Completado</p>`;
+                } else if (currentPatrol && currentLocationIndex === index) {
+                    card.className = 'location-card current';
+                    card.innerHTML = `<h4>${index + 1}. ${name}</h4><p>👁️ Siguiente</p>`;
+                } else {
+                    card.className = 'location-card';
+                    card.innerHTML = `<h4>${index + 1}. ${name}</h4><p>Pendiente</p>`;
+                }
+            });
+        }
+
+        function updateProgress() {
+            if (!currentPatrol) return;
+            
+            const completed = currentPatrol.locations.length;
+            const total = AUTHORIZED_QRS.length;
+            const percentage = (completed / total) * 100;
+            
+            document.getElementById('progress-fill').style.width = percentage + '%';
+            document.getElementById('completed-count').textContent = completed;
+        }
+
+        function updateDisplay() {
+            updateProgress();
+            updateLocationCards();
+        }
+
+        async function finishPatrol() {
+            if (!currentPatrol) {
+                showAlert('⚠️ No hay un recorrido activo', 'warning');
+                return;
+            }
+            
+            currentPatrol.endTime = new Date();
+            currentPatrol.completed = true;
+            
+            // Guardar en Firebase
+            const saved = await saveToFirebase(currentPatrol);
+            
+            showAlert(`🎉 Recorrido completado: ${currentPatrol.locations.length} de ${AUTHORIZED_QRS.length} ubicaciones registradas`, 'success');
+            
+            // Resetear interfaz
+            document.getElementById('start-patrol').disabled = false;
+            document.getElementById('scan-btn').disabled = true;
+            document.getElementById('finish-patrol').disabled = true;
+            document.getElementById('patrol-status').textContent = 'Listo para iniciar recorrido';
+            
+            stopScanner();
+            
+            // Limpiar estado
+            currentPatrol = null;
+            currentLocationIndex = 0;
+            
+            updateDisplay();
+        }
+
+        function exportData() {
+            if (!isFirebaseConnected) {
+                exportLocalData();
+                return;
+            }
+            
+            // Exportar datos de Firebase
+            db.collection('recorridos').orderBy('createdAt', 'desc').limit(100).get()
+                .then(snapshot => {
+                    const data = [];
+                    snapshot.forEach(doc => {
+                        const patrol = doc.data();
+                        data.push({
+                            'ID Recorrido': patrol.patrolId,
+                            'Fecha Inicio': patrol.startTime?.toDate().toLocaleString('es-MX'),
+                            'Fecha Fin': patrol.endTime?.toDate().toLocaleString('es-MX') || 'N/A',
+                            'Completado': patrol.completed ? 'Sí' : 'No',
+                            'Ubicaciones': patrol.completedLocations + '/' + patrol.totalLocations,
+                            'Detalles': patrol.locations?.map(loc => 
+                                `${loc.locationName}: ${loc.observation}`
+                            ).join(' | ') || 'Sin detalles'
+                        });
+                    });
+                    
+                    downloadCSV(data, 'recorridos_firebase.csv');
+                    showAlert('📊 Datos exportados correctamente desde Firebase', 'success');
+                })
+                .catch(error => {
+                    console.error('Error exportando desde Firebase:', error);
+                    exportLocalData();
+                });
+        }
+
+        function exportLocalData() {
+            const history = JSON.parse(localStorage.getItem('patrolHistory') || '[]');
+            
+            if (history.length === 0) {
+                showAlert('⚠️ No hay datos para exportar', 'warning');
+                return;
+            }
+            
+            const data = history.map(patrol => ({
+                'ID Recorrido': patrol.id,
+                'Fecha Inicio': new Date(patrol.startTime).toLocaleString('es-MX'),
+                'Fecha Fin': patrol.endTime ? new Date(patrol.endTime).toLocaleString('es-MX') : 'N/A',
+                'Completado': patrol.completed ? 'Sí' : 'No',
+                'Ubicaciones': patrol.locations.length + '/' + AUTHORIZED_QRS.length,
+                'Detalles': patrol.locations.map(loc => 
+                    `${loc.locationName}: ${loc.observation}`
+                ).join(' | ')
+            }));
+            
+            downloadCSV(data, 'recorridos_local.csv');
+            showAlert('📊 Datos locales exportados correctamente', 'success');
+        }
+
+        function downloadCSV(data, filename) {
+            if (data.length === 0) return;
+            
+            const headers = Object.keys(data[0]);
+            const csvContent = [
+                headers.join(','),
+                ...data.map(row => headers.map(header => `"${row[header]}"`).join(','))
+            ].join('\n');
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Funciones de manejo de errores y reconexión
+        window.addEventListener('online', function() {
+            console.log('🌐 Conexión a internet restaurada');
+            if (!isFirebaseConnected) {
+                showAlert('🌐 Conexión restaurada. Reintentando conexión a Firebase...', 'success');
+                setTimeout(() => initializeFirebase(), 2000);
+            }
+        });
+
+        window.addEventListener('offline', function() {
+            console.log('📵 Sin conexión a internet');
+            isFirebaseConnected = false;
+            updateFirebaseStatus('offline');
+            showAlert('📵 Sin conexión. Los datos se guardarán localmente.', 'warning');
+        });
+
+        // Prevenir cierre accidental durante recorrido
+        window.addEventListener('beforeunload', function(e) {
+            if (currentPatrol && !currentPatrol.completed) {
+                e.preventDefault();
+                e.returnValue = 'Tienes un recorrido activo. ¿Estás seguro de salir?';
+                return e.returnValue;
+            }
+        });
+
+        // Funciones adicionales de utilidad
+        function resetApp() {
+            if (confirm('¿Estás seguro de que quieres reiniciar la aplicación? Se perderá el recorrido actual.')) {
+                currentPatrol = null;
+                currentLocationIndex = 0;
+                stopScanner();
+                updateDisplay();
+                
+                document.getElementById('start-patrol').disabled = false;
+                document.getElementById('scan-btn').disabled = true;
+                document.getElementById('finish-patrol').disabled = true;
+                document.getElementById('patrol-status').textContent = 'Listo para iniciar recorrido';
+                
+                showAlert('🔄 Aplicación reiniciada', 'success');
+            }
+        }
+
+        // Auto-guardar progreso cada 30 segundos
+        setInterval(async () => {
+            if (currentPatrol && currentPatrol.locations.length > 0 && isFirebaseConnected) {
+                try {
+                    await saveToFirebase(currentPatrol);
+                    console.log('💾 Auto-guardado completado');
+                } catch (error) {
+                    console.error('❌ Error en auto-guardado:', error);
+                }
+            }
+        }, 30000);
+
+        console.log('✅ Sistema de Control de Rondas cargado completamente');
+    </script>
+</body>
+</html>
